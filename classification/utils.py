@@ -14,8 +14,8 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def setup_ddp(rank, world_size):
-    os.environ['MASTER_PORT'] = '12001'
+def setup_ddp(rank, world_size, port='12001'):
+    os.environ['MASTER_PORT'] = port
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.system('export MASTER_ADDR=$(scontrol show hostname ${SLURM_NODELIST} | head -n 1)')
     torch.cuda.set_device(rank)

@@ -1,24 +1,22 @@
 cuda_config:
   cudnn_deterministic: True
   cudnn_benchmark: True
-  cuda_visible_devices: "0, 1"
-  world_size: 2
+  cuda_visible_devices: "1"
+  world_size: 1
 
 model_param:
-  image_size: 32
-  patch_size: 4
+  img_size: 32
+  patch_size: 8
   num_classes: 10
-  dim: 512
+  embed_dim: 384
   depth: 6
-  heads: 8
-  mlp_dim: 512
-  dropout: 0.1
-  emb_dropout: 0.1
+  num_heads: 8
   
 optim:
   optim_name: Adam
   optim_param:
     lr: 0.001
+    weight_decay: 0.01
 
 scheduler:
   # scheduler_name: MultiStepLR
@@ -32,12 +30,12 @@ scheduler:
 use_warmup: False
 warmup_param:
   multiplier: 1
-  total_epoch: 1
+  total_epoch: 3
 
 epochs: 500
-batch_size: 512
-num_workers: 8
-log_freq: 5
+batch_size: 128
+num_workers: 2
+log_freq: 15
 # log_img_epoch: 100
 save_epoch: 20
 amp: False

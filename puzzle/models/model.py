@@ -99,7 +99,7 @@ class ViT(nn.Module):
             nn.LayerNorm(dim),
         )
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
+        # self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
         self.dropout = nn.Dropout(emb_dropout)
 
@@ -110,18 +110,38 @@ class ViT(nn.Module):
 
         self.mlp_head = nn.Linear(dim, num_classes)
 
+        self.loss_fn = nn.CrossEntropyLoss()
+
     def forward(self, img):
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
 
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
         x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(n + 1)]
+        # x += self.pos_embedding[:, :(n + 1)]
         x = self.dropout(x)
 
         x = self.transformer(x)
 
-        x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
+        # x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
 
+        # x = self.to_latent(x)
+        # return self.mlp_head(x)
+
+        x = x[:, 1:]
         x = self.to_latent(x)
-        return self.mlp_head(x)
+        x = self.mlp_head(x)
+
+        tgt = torch.arange(0, 16, device=x.device).unsqueeze(0).repeat(x.shape[0], 1).reshape(-1)
+        loss = self.loss_fn(x.reshape(-1, 16), tgt)
+        return loss
+
+
+class Model(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+        self.vit = ViT(**kwargs)
+
+    def forward(self, x):
+        return self.vit(x)
