@@ -3,20 +3,24 @@ cuda_config:
   cudnn_benchmark: True
   cuda_visible_devices: "1"
   world_size: 1
+  port: "12002"
 
 model_param:
   img_size: 32
-  patch_size: 8
+  patch_size: 4
   num_classes: 10
-  embed_dim: 384
-  depth: 6
-  num_heads: 8
-  
+  global_pool: token
+  embed_dim: 192
+  depth: 12
+  num_heads: 12
+  mlp_ratio: 2
+  class_token: True
+
 optim:
   optim_name: Adam
   optim_param:
     lr: 0.001
-    weight_decay: 0.01
+    weight_decay: 0.00005
 
 scheduler:
   # scheduler_name: MultiStepLR
@@ -25,17 +29,22 @@ scheduler:
   #   gamma: 0.1
   scheduler_name: CosineAnnealingLR
   scheduler_param:
-    T_max: 500
+    T_max: 100
+    eta_min: 0.00005
 
-use_warmup: False
+use_warmup: True
 warmup_param:
   multiplier: 1
-  total_epoch: 3
+  total_epoch: 5
 
-epochs: 500
+ckpt_path: False
+mode: full
+dataset: CIFAR10
+epochs: 100
 batch_size: 128
-num_workers: 2
+num_workers: 0
 log_freq: 15
 # log_img_epoch: 100
-save_epoch: 20
+save_epoch: 5
+eval_epoch: 5
 amp: False

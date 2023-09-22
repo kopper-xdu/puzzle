@@ -3,7 +3,6 @@ import traceback
 import wandb
 from tqdm import tqdm
 from omegaconf import OmegaConf
-from PIL import Image
 from utils import (
     setup_seed,
     setup_ddp,
@@ -13,32 +12,29 @@ from utils import (
 
 import torch as th
 import torchvision
-from torch.nn import functional as F
 import torch.optim as optim
 from torchvision import transforms
-from torchvision.utils import save_image
 from warmup_scheduler import GradualWarmupScheduler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast
 from torch.cuda.amp import GradScaler
 
-from models import VisionTransformer
-from datasets import dataset
+from models import MyViT
+from datasets import ImageNet
 
 
 class Trainer:
-    def __init__(self, config_path = 'config.yaml') -> None:
-        self.config_path = config_path
-        self.conf = OmegaConf.load(config_path)
+    def __init__(self, config):
+        self.config = config
 
-        cuda_conf = self.conf.cuda_config
-        th.backends.cudnn.deterministic = cuda_conf.cudnn_deterministic
-        th.backends.cudnn.benchmark = cuda_conf.cudnn_benchmark
-        os.environ['CUDA_VISIBLE_DEVICES'] = cuda_conf.cuda_visible_devices
+        cuda_config = config.cuda_config
+        th.backends.cudnn.deterministic = cuda_config.cudnn_deterministic
+        th.backends.cudnn.benchmark = cuda_config.cudnn_benchmark
+        os.environ['CUDA_VISIBLE_DEVICES'] = cuda_config.cuda_visible_devices
 
     def train(self):
-        self.exp_dir = init_exp(self.config_path)
-        world_size = self.conf.cuda_config.world_size
+        self.exp_dir = init_exp(self.config)
+        world_size = self.config.cuda_config.world_size
 
         th.multiprocessing.spawn(self.train_loop,
                                  args=(world_size, ),
@@ -47,65 +43,79 @@ class Trainer:
 
     def train_loop(self, rank, world_size):
         try:
-            setup_ddp(rank, world_size, self.conf.cuda_config.port)
+            setup_ddp(rank, world_size, self.config.cuda_config.port)
             setup_seed(3407 + rank)
 
             exp_dir = self.exp_dir
-            config = self.conf
+            config = self.config
 
             if rank == 0:
-                wandb.init(project='classify',
-                           name=exp_dir,
+                wandb.init(project='puzzle',
+                           name=exp_dir[11:],
                            config=OmegaConf.to_container(config)
                            )
-            
-            model = VisionTransformer(**config.model_param)
+                
+            model = MyViT(mode=config.mode, **config.model_param)
             model.to(rank)
             model = DDP(model, device_ids=[rank], output_device=rank)
             
             opt = getattr(optim, config.optim.optim_name)(filter(lambda p: p.requires_grad, model.parameters()),
                                                           **config.optim.optim_param)
             scheduler = getattr(optim.lr_scheduler, config.scheduler.scheduler_name)(opt, **config.scheduler.scheduler_param)
+
             if config.use_warmup:
                 warmup = GradualWarmupScheduler(opt, **config.warmup_param, after_scheduler=scheduler)
+                opt.zero_grad()
+                opt.step()
+                warmup.step()
 
+            img_size = 224 if config.dataset == 'ImageNet' else 32
+            norm_val = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225) if config.dataset == 'ImageNet' else (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
             transform = transforms.Compose([
-                # transforms.RandomCrop(size=32, padding=4),
+                # transforms.RandomHorizontalFlip(),
+                transforms.RandomResizedCrop(img_size),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
+                transforms.Normalize(norm_val)
             ])
 
-            dataset = torchvision.datasets.CIFAR10(root='./datasets/CIFAR10', transform=transform, download=True)
+            if config.dataset == 'ImageNet':
+                dataset = ImageNet(db_path=f'./datasets/{config.dataset}/train.lmdb', transform=transform)
+            else:
+                dataset = getattr(torchvision.datasets, config.dataset)(root=f'./datasets/{config.dataset}', 
+                                                                        transform=transform, 
+                                                                        download=True)
+                
             sampler = th.utils.data.distributed.DistributedSampler(dataset)
             train_loader = DataLoaderX(dataset,
                                       batch_size=config.batch_size,
                                       num_workers=config.num_workers,
                                       sampler=sampler,
-                                      pin_memory=True)
+                                      pin_memory=True
+                                      )
             
             scaler = GradScaler(enabled=config.amp)
-            loss_fn = th.nn.CrossEntropyLoss(label_smoothing=0.1)
-
+            
             for epoch in range(config.epochs):
-                # for i, (img, tgt) in enumerate(tqdm(train_loader)):
-                for i, (img, tgt) in enumerate(train_loader):
+                for i, (img, _) in enumerate(train_loader):
                     img = img.to(rank)
-                    tgt = tgt.to(rank)
 
                     with autocast(enabled=config.amp):
-                        out = model(img)
-                        loss = loss_fn(out, tgt)
+                        corr, loss = model.forward(img)
 
                     opt.zero_grad()
                     scaler.scale(loss).backward()
                     scaler.step(opt)
                     scaler.update()
 
+                    acc = sum(corr) / corr.shape[0]
+
                     if (i + 1) % config.log_freq == 0 and rank == 0:
-                        print(f'Epoch [{epoch + 1}/ {config.epochs}], loss: {loss.item()}')
+                        print(f'Epoch [{epoch + 1}/ {config.epochs}], loss: {loss.item()}, acc: {acc}')
                         wandb.log({'loss': loss.item(),
+                                   'acc': acc,
                                    'lr': opt.state_dict()['param_groups'][0]['lr']})
+                        # print(opt.state_dict()['param_groups'][0]['lr'])
 
                 if config.use_warmup:
                     warmup.step()
@@ -121,12 +131,12 @@ class Trainer:
                     self.eval(ckpt_path, use_wandb=True)
 
             if rank == 0:
-                ckpt_path = exp_dir + f'/ckpt-final.pth'
+                ckpt_path = os.path.join(exp_dir, 'ckpt-final.pth')
                 th.save(model.module.state_dict(), ckpt_path)
                 print.info('model saved!')
 
                 self.eval(ckpt_path, use_wandb=True)
-
+            
             if rank == 0:
                 wandb.finish()
 
@@ -138,39 +148,44 @@ class Trainer:
 
     @th.no_grad()
     def eval(self, ckpt_path, use_wandb = False):
-        config = self.conf
+        config = self.config
 
-        model = VisionTransformer(**config.model_param)
+        model = MyViT(mode=config.mode, **config.model_param)
         model.to(0)
         model.load_state_dict(th.load(ckpt_path))
         model.eval()
 
+        norm_val = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225) if config.dataset == 'ImageNet' else (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
         transform = transforms.Compose([
                 transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
+                transforms.Normalize(norm_val)
             ])
 
-        dataset = torchvision.datasets.CIFAR10(root='./datasets/CIFAR10', train=False, transform=transform, download=True)
+        if config.dataset == 'ImageNet':
+            dataset = ImageNet(db_path=f'./datasets/{config.dataset}/val.lmdb', transform=transform)
+        else:
+            dataset = getattr(torchvision.datasets, config.dataset)(root=f'./datasets/{config.dataset}', 
+                                                                    transform=transform,
+                                                                    train=False,
+                                                                    download=True)
 
         test_loader = DataLoaderX(dataset, 
-                                  batch_size=512, 
+                                  batch_size=256,
                                   num_workers=2
                                   )
-        loss_fn = th.nn.CrossEntropyLoss()
 
         total = 0
         correct = 0
         loss = 0
-        for img, tgt in tqdm(test_loader):
+        for img, _ in tqdm(test_loader):
             img = img.to(0)
-            tgt = tgt.to(0)
+            # tgt = tgt.to(0)
 
-            out = model(img)
+            corr, loss = model(img)
 
-            loss += loss_fn(out, tgt).item()
-            _, pred = th.max(out, 1)
-            total += img.shape[0]
-            correct += sum(pred == tgt)
+            loss += loss.item()
+            correct += sum(corr)
+            total += corr.shape[0]
 
         acc = correct / total
         # loss /= len(test_loader)
@@ -178,10 +193,4 @@ class Trainer:
 
         if use_wandb:
             wandb.log({'eval_loss': loss,
-                       'acc': acc})
-
-
-
-if __name__ == '__main__':
-    trainer = Trainer()
-    trainer.test('experiment/20230228-21-52-57/ckpt-epoch10.pth')
+                       'eval_acc': acc})

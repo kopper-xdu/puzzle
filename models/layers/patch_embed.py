@@ -16,7 +16,6 @@ from torch import nn as nn
 import torch.nn.functional as F
 
 from .helpers import to_2tuple
-from .trace_utils import _assert
 
 _logger = logging.getLogger(__name__)
 
@@ -48,8 +47,8 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.shape
-        _assert(H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]}).")
-        _assert(W == self.img_size[1], f"Input image width ({W}) doesn't match model ({self.img_size[1]}).")
+        # _assert(H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]}).")
+        # _assert(W == self.img_size[1], f"Input image width ({W}) doesn't match model ({self.img_size[1]}).")
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC

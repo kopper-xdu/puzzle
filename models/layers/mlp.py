@@ -6,6 +6,7 @@ from functools import partial
 
 from torch import nn as nn
 
+# from .grn import GlobalResponseNorm
 from .helpers import to_2tuple
 
 
@@ -42,4 +43,3 @@ class Mlp(nn.Module):
         x = self.fc2(x)
         x = self.drop2(x)
         return x
-

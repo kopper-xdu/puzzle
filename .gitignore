@@ -2,3 +2,6 @@
 **/wandb
 **/experiment
 **/CIFAR10
+**/CIFAR100
+**/ImageNet
+/prepare_dataset

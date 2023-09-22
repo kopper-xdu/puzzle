@@ -3,6 +3,7 @@ import numpy as np
 import random
 import os
 import time
+from omegaconf import OmegaConf
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from prefetch_generator import BackgroundGenerator
@@ -14,8 +15,8 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def setup_ddp(rank, world_size):
-    os.environ['MASTER_PORT'] = '12001'
+def setup_ddp(rank, world_size, port='12001'):
+    os.environ['MASTER_PORT'] = port
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.system('export MASTER_ADDR=$(scontrol show hostname ${SLURM_NODELIST} | head -n 1)')
     torch.cuda.set_device(rank)
@@ -26,10 +27,10 @@ def cleanup_ddp():
     dist.destroy_process_group()
 
 
-def init_exp(config_path):
-    exp_dir = os.path.join('experiment', time.strftime("%Y%m%d-%H-%M-%S", time.localtime()))
+def init_exp(config):
+    exp_dir = os.path.join('experiment', config.exp_name)
     os.makedirs(exp_dir)
-    os.system(f"cp {config_path} ./{exp_dir}")
+    OmegaConf.save(config, os.path.join(exp_dir, 'config.yaml'))
 
     return exp_dir
 

@@ -1,7 +1,7 @@
 cuda_config:
   cudnn_deterministic: True
   cudnn_benchmark: True
-  cuda_visible_devices: "0"
+  cuda_visible_devices: "1"
   world_size: 1
   port: "12001"
 
@@ -9,15 +9,17 @@ model_param:
   img_size: 32
   patch_size: 4
   num_classes: 10
-  embed_dim: 384
-  depth: 7
+  global_pool: avg
+  embed_dim: 192
+  depth: 12
   num_heads: 12
-  mlp_ratio: 1
+  mlp_ratio: 2
+  class_token: False
 
 optim:
-  optim_name: Adam
+  optim_name: SGD
   optim_param:
-    lr: 0.001
+    lr: 0.01
     weight_decay: 0.00005
 
 scheduler:
@@ -27,18 +29,24 @@ scheduler:
   #   gamma: 0.1
   scheduler_name: CosineAnnealingLR
   scheduler_param:
-    T_max: 200
+    T_max: 100
+    eta_min: 0.00005
 
 use_warmup: True
 warmup_param:
   multiplier: 1
-  total_epoch: 5
+  total_epoch: 3
 
-epochs: 200
+# ckpt_path: "experiment/20230920-19-37-44/ckpt-epoch40.pth"
+# ckpt_path: "experiment/20230920-18-36-40/ckpt-epoch40.pth"
+ckpt_path: False
+mode: finetune
+dataset: CIFAR10
+epochs: 100
 batch_size: 128
 num_workers: 0
 log_freq: 15
 # log_img_epoch: 100
-save_epoch: 5
-eval_epoch: 5
+save_epoch: 2
+eval_epoch: 2
 amp: False

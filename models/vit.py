@@ -1,5 +1,6 @@
 from functools import partial
 import math
+from typing import Any, Mapping
 
 import torch
 from torch import nn
@@ -88,6 +89,7 @@ class VisionTransformer(nn.Module):
 
     def __init__(
             self,
+            mode = 'pretrain',
             img_size=224,
             patch_size=16,
             in_chans=3,
@@ -146,7 +148,6 @@ class VisionTransformer(nn.Module):
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.num_prefix_tokens = 1 if class_token else 0
         self.no_embed_class = no_embed_class
-        self.grad_checkpointing = False
 
         self.patch_embed = embed_layer(
             img_size=img_size,
@@ -156,6 +157,7 @@ class VisionTransformer(nn.Module):
             bias=not pre_norm,  # disable bias if pre-norm is used (e.g. CLIP)
         )
         num_patches = self.patch_embed.num_patches
+        self.num_patches = num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if class_token else None
         embed_len = num_patches if no_embed_class else num_patches + self.num_prefix_tokens
@@ -237,3 +239,50 @@ def init_weights_vit_timm(module: nn.Module, name: str = ''):
             nn.init.zeros_(module.bias)
     elif hasattr(module, 'init_weights'):
         module.init_weights()
+
+
+class MyViT(VisionTransformer):
+    def __init__(self, mode='pretrain', **kwargs):
+        super().__init__(**kwargs)
+
+        self.mode = mode
+        if mode == 'pretrain':
+            self.pretrain_head = nn.Linear(self.embed_dim, self.num_classes)
+            del self.head
+            del self.pos_embed
+        elif mode == 'finetune':
+            del self.pos_embed
+
+    def forward_features(self, x):
+        x = self.patch_embed(x)
+
+        if self.cls_token is not None:
+            x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+        if self.mode == 'full':
+            x = x + self.pos_embed
+
+        x = self.pos_drop(x)
+        x = self.norm_pre(x)
+        x = self.blocks(x)
+        x = self.norm(x)
+        return x
+    
+    def forward(self, x):
+        x = self.forward_features(x)
+
+        if self.mode == 'pretrain':
+            x = self.fc_norm(x)
+            x = self.pretrain_head(x)
+
+            tgt = torch.arange(0, self.num_classes, device=x.device).unsqueeze(0).repeat(x.shape[0], 1).reshape(-1)
+
+            x = x.reshape(-1, self.num_classes)
+            
+            _, pred = torch.max(x, 1)
+            return pred == tgt, nn.CrossEntropyLoss()(x, tgt)
+        elif self.mode == 'finetune' or self.mode == 'full':
+            if self.global_pool:
+                x = x[:, self.num_prefix_tokens:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
+
+            x = self.fc_norm(x)
+            return self.head(x)
