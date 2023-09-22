@@ -85,6 +85,7 @@ class Trainer:
             train_loader = DataLoaderX(dataset,
                                       batch_size=config.batch_size,
                                       num_workers=config.num_workers,
+                                      shuffle=True,
                                       sampler=sampler,
                                       pin_memory=True)
             

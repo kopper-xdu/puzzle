@@ -70,13 +70,14 @@ class Trainer:
                 warmup.step()
 
             img_size = 224 if config.dataset == 'ImageNet' else 32
-            norm_val = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225) if config.dataset == 'ImageNet' else (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+            mean = (0.485, 0.456, 0.406) if config.dataset == 'ImageNet' else (0.4914, 0.4822, 0.4465)
+            std = (0.229, 0.224, 0.225) if config.dataset == 'ImageNet' else (0.2023, 0.1994, 0.2010)
             transform = transforms.Compose([
                 # transforms.RandomHorizontalFlip(),
                 transforms.RandomResizedCrop(img_size),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize(norm_val)
+                transforms.Normalize(mean, std)
             ])
 
             if config.dataset == 'ImageNet':
@@ -97,6 +98,7 @@ class Trainer:
             scaler = GradScaler(enabled=config.amp)
             
             for epoch in range(config.epochs):
+                train_loader.sampler.set_epoch(epoch)
                 for i, (img, _) in enumerate(train_loader):
                     img = img.to(rank)
 
@@ -155,10 +157,11 @@ class Trainer:
         model.load_state_dict(th.load(ckpt_path))
         model.eval()
 
-        norm_val = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225) if config.dataset == 'ImageNet' else (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+        mean = (0.485, 0.456, 0.406) if config.dataset == 'ImageNet' else (0.4914, 0.4822, 0.4465)
+        std = (0.229, 0.224, 0.225) if config.dataset == 'ImageNet' else (0.2023, 0.1994, 0.2010)
         transform = transforms.Compose([
                 transforms.ToTensor(),
-                transforms.Normalize(norm_val)
+                transforms.Normalize(mean, std)
             ])
 
         if config.dataset == 'ImageNet':
