@@ -110,6 +110,7 @@ class VisionTransformer(nn.Module):
             norm_layer=None,
             act_layer=None,
             block_fn=Block,
+            rotate=False
     ):
         """
         Args:
@@ -148,6 +149,7 @@ class VisionTransformer(nn.Module):
         self.no_embed_class = no_embed_class
 
         self.patch_embed = embed_layer(
+            rotate=rotate,
             img_size=img_size,
             patch_size=patch_size,
             in_chans=in_chans,

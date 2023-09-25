@@ -73,9 +73,10 @@ class Trainer:
                 warmup.step()
 
             transform = transforms.Compose([
+                transforms.RandomResizedCrop(32),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
             ])
             
             dataset = getattr(torchvision.datasets, config.dataset)(root=f'./datasets/{config.dataset}', 
@@ -94,6 +95,7 @@ class Trainer:
             loss_fn = th.nn.CrossEntropyLoss()
             
             for epoch in range(config.epochs):
+                train_loader.sampler.set_epoch(epoch)
                 for i, (img, tgt) in enumerate(train_loader):
                     img = img.to(rank)
                     tgt = tgt.to(rank)
