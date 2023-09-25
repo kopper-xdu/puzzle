@@ -93,7 +93,7 @@ class Trainer:
                                       num_workers=config.num_workers,
                                       sampler=sampler,
                                       pin_memory=True,
-                                      persistent_workers=True
+                                      persistent_workers=True if config.num_workers > 0 else False
                                       )
             
             scaler = GradScaler(enabled=config.amp)
@@ -168,7 +168,7 @@ class Trainer:
         if config.dataset == 'ImageNet':
             dataset = ImageNet(db_path=f'./datasets/{config.dataset}/val.lmdb', transform=transform)
         else:
-            dataset = getattr(torchvision.datasets, config.dataset)(root=f'./datasets/{config.dataset}', 
+            dataset = getattr(torchvision.datasets, config.dataset)(root=f'./datasets/{config.dataset}',
                                                                     transform=transform,
                                                                     train=False,
                                                                     download=True)

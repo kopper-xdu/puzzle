@@ -1,12 +1,10 @@
 from functools import partial
-import math
-from typing import Any, Mapping
 
 import torch
 from torch import nn
-import torch.nn.functional as F
 
 from .layers import Mlp, PatchEmbed, DropPath, trunc_normal_
+from torch.nn import MultiheadAttention
 
 
 class Attention(nn.Module):

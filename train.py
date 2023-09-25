@@ -75,7 +75,7 @@ class Trainer:
             transform = transforms.Compose([
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+                # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
             ])
             
             dataset = getattr(torchvision.datasets, config.dataset)(root=f'./datasets/{config.dataset}', 
@@ -85,9 +85,10 @@ class Trainer:
             train_loader = DataLoaderX(dataset,
                                       batch_size=config.batch_size,
                                       num_workers=config.num_workers,
-                                      shuffle=True,
                                       sampler=sampler,
-                                      pin_memory=True)
+                                      pin_memory=True,
+                                      persistent_workers=True if config.num_workers > 0 else False
+                                      )
             
             scaler = GradScaler(enabled=config.amp)
             loss_fn = th.nn.CrossEntropyLoss()
@@ -162,7 +163,7 @@ class Trainer:
 
         test_loader = DataLoaderX(dataset, 
                                   batch_size=256,
-                                  num_workers=2
+                                  num_workers=2,
                                   )
 
         total = 0

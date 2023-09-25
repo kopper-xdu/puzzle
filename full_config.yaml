@@ -1,7 +1,7 @@
 cuda_config:
   cudnn_deterministic: True
   cudnn_benchmark: True
-  cuda_visible_devices: "1"
+  cuda_visible_devices: "0"
   world_size: 1
   port: "12002"
 

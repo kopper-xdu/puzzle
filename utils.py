@@ -3,10 +3,12 @@ import numpy as np
 import random
 import os
 import time
+import platform
 from omegaconf import OmegaConf
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from prefetch_generator import BackgroundGenerator
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -18,9 +20,11 @@ def setup_seed(seed):
 def setup_ddp(rank, world_size, port='12001'):
     os.environ['MASTER_PORT'] = port
     os.environ['MASTER_ADDR'] = 'localhost'
-    # os.system('export MASTER_ADDR=$(scontrol show hostname ${SLURM_NODELIST} | head -n 1)')
     torch.cuda.set_device(rank)
-    dist.init_process_group(backend='nccl', rank=rank, world_size=world_size)
+
+    plat = platform.system().lower()
+    backend = 'nccl' if plat == 'linux' else 'gloo'
+    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
 
 def cleanup_ddp():

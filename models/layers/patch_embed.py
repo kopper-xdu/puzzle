@@ -15,6 +15,10 @@ import torch
 from torch import nn as nn
 import torch.nn.functional as F
 
+from torchvision import transforms, utils
+import random
+from PIL import Image
+
 from .helpers import to_2tuple
 
 _logger = logging.getLogger(__name__)
@@ -32,10 +36,14 @@ class PatchEmbed(nn.Module):
             norm_layer=None,
             flatten=True,
             bias=True,
+            rotate=True,
+            rotate_rotio=None
     ):
         super().__init__()
         img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
+        # patch_size = to_2tuple(patch_size)
+        img_size = (224, 224)
+        patch_size = (16, 16)
         self.img_size = img_size
         self.patch_size = patch_size
         self.grid_size = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
@@ -45,10 +53,31 @@ class PatchEmbed(nn.Module):
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size, bias=bias)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
+        self.rotate = rotate
+        self.rotate_ratio = rotate_rotio
+
+
     def forward(self, x):
-        B, C, H, W = x.shape
-        # _assert(H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]}).")
-        # _assert(W == self.img_size[1], f"Input image width ({W}) doesn't match model ({self.img_size[1]}).")
+        x = Image.open('datasets\custom\istockphoto-1322775684-612x612.jpg')
+        transform = transforms.Compose([transforms.Resize(224),
+                            transforms.ToTensor()])
+        x = transform(x).unsqueeze(0)
+        utils.save_image(x, './1.png')
+
+        if self.rotate:
+            print(self.grid_size)
+            for i in range(self.grid_size[0]):
+                for j in range(self.grid_size[1]):
+                    angle = random.choice([0, 0, 0, 90, 180, 270])
+                    # angle=180
+                    x[:, :, i * self.patch_size[0] : (i+1) * self.patch_size[0], j * self.patch_size[1] : (j+1) * self.patch_size[1]] = \
+                        transforms.functional.rotate(
+                            x[:, :, i * self.patch_size[0] : (i+1) * self.patch_size[0], j * self.patch_size[1] : (j+1) * self.patch_size[1]],
+                            angle
+                            )
+        
+        utils.save_image(x, './2.png')
+        exit(0)
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
