@@ -36,14 +36,14 @@ class PatchEmbed(nn.Module):
             norm_layer=None,
             flatten=True,
             bias=True,
-            rotate=True,
-            rotate_rotio=None
+            rotate=False,
+            rotate_rotio=0.5
     ):
         super().__init__()
         img_size = to_2tuple(img_size)
-        # patch_size = to_2tuple(patch_size)
-        img_size = (224, 224)
-        patch_size = (16, 16)
+        patch_size = to_2tuple(patch_size)
+        # img_size = (224, 224)
+        # patch_size = (16, 16)
         self.img_size = img_size
         self.patch_size = patch_size
         self.grid_size = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
@@ -58,26 +58,25 @@ class PatchEmbed(nn.Module):
 
 
     def forward(self, x):
-        x = Image.open('datasets\custom\istockphoto-1322775684-612x612.jpg')
-        transform = transforms.Compose([transforms.Resize(224),
-                            transforms.ToTensor()])
-        x = transform(x).unsqueeze(0)
-        utils.save_image(x, './1.png')
+        # x = Image.open('datasets/custom/istockphoto-1322775684-612x612.jpg')
+        # transform = transforms.Compose([transforms.Resize(224),
+        #                     transforms.ToTensor()])
+        # x = transform(x).unsqueeze(0)
+        # utils.save_image(x, './1.png')
 
         if self.rotate:
             print(self.grid_size)
             for i in range(self.grid_size[0]):
                 for j in range(self.grid_size[1]):
                     angle = random.choice([0, 0, 0, 90, 180, 270])
-                    # angle=180
                     x[:, :, i * self.patch_size[0] : (i+1) * self.patch_size[0], j * self.patch_size[1] : (j+1) * self.patch_size[1]] = \
                         transforms.functional.rotate(
                             x[:, :, i * self.patch_size[0] : (i+1) * self.patch_size[0], j * self.patch_size[1] : (j+1) * self.patch_size[1]],
                             angle
                             )
         
-        utils.save_image(x, './2.png')
-        exit(0)
+        # utils.save_image(x, './2.png')
+        # exit(0)
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
